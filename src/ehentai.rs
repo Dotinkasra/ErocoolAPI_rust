@@ -7,21 +7,37 @@ use regex::Regex;
 
 use super::Manga;
 
-pub async fn get_ehentai(html: &Html) -> Manga {
-    let manga_name: String = get_manga_name(html);
+async fn get_reqwest(url: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let body = reqwest::get(url).await?.text().await?;
+
+    Ok(body)
+}
+
+pub async fn get_ehentai(url: &str) -> Manga {
+    let result: String = get_reqwest(&url).await.unwrap();
+    let html: Html = Html::parse_document(&result);
+    
+    let manga_name: String = get_manga_name(&html);
     info!("【Name】:{}", &manga_name);
 
-    let viewer_page_links: Vec<String> = get_viewer_links(html);
+    let external_viewer_links: Option<Vec<String>> = get_external_viewer_links(&html);
     let img_links: &mut Vec<String> = &mut vec![];
     
-    for viewer in viewer_page_links {
-        info!("【viewer】:{}", &viewer);
-        let response = reqwest::get(viewer).await.unwrap().text().await.unwrap();
-        let html: Html = Html::parse_document(&response);
-        let all_imglink = get_all_imglink(&html);
-        for img in all_imglink {
-            info!("【img】:{}", &img);
-            img_links.push(single_page_scraper(&img).await);
+    for img in get_all_imglink(&html) {
+        info!("【img】{}:{}", 1, &img);
+        img_links.push(single_page_scraper(&img).await);
+    }
+
+    if let Some(viewer_page_links) = external_viewer_links {
+        for viewer in viewer_page_links {
+            info!("【viewer】:{}", &viewer);
+            let response: String = get_reqwest(&url).await.unwrap();
+            let current_html: Html = Html::parse_document(&response);
+            let all_imglink = get_all_imglink(&current_html);
+            for img in all_imglink {
+                info!("【img】{}:{}", "external", &img);
+                img_links.push(single_page_scraper(&img).await);
+            }
         }
     }
     return Manga{title: manga_name, pages: img_links.to_vec()};
@@ -53,7 +69,7 @@ fn get_all_imglink(html: &Html) -> HashSet<String> {
     return uniq_imglinks;
 }
 
-fn get_viewer_links(html: &Html)  -> Vec<String>{
+fn get_external_viewer_links(html: &Html)  -> Option<Vec<String>>{
     let mut viewer_links: Vec<String> = vec![];
 
     let selector_td: Selector = Selector::parse("body > div:nth-child(10) > table > tbody > tr td").unwrap();
@@ -72,19 +88,16 @@ fn get_viewer_links(html: &Html)  -> Vec<String>{
     if let Some(captures) = re.captures(&url) {
         let content_link = String::from("https://e-hentai.org/g/") + &captures[1] + "/" + &captures[2] + "/";
         let template = content_link.clone();
-
-        viewer_links.push(content_link);
-
         let last_page_num = &captures[3].parse::<u8>().unwrap();
 
         for i in 1..=*last_page_num {
-            let numbered_url = template.to_string() + "p=" + &i.to_string();
+            let numbered_url = template.to_string() + "?p=" + &i.to_string();
             viewer_links.push(numbered_url);
         }
     } else {
-        viewer_links.push(url.to_string());
+        return None;
     }
-    return viewer_links;
+    return Some(viewer_links);
 
 }
 

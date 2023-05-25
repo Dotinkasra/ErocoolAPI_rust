@@ -1,5 +1,6 @@
-use scraper::Html;
-use std::{env, fs::{File, self}, io};
+use log::info;
+use std::{env, fs::{File, self}};
+use std::io::{BufWriter, copy};
 
 mod ehentai;
 
@@ -12,11 +13,12 @@ impl Manga {
     async fn manga_download(self) {
         fs::create_dir_all(&self.title).unwrap();
         for img in self.pages.iter() {
+            info!("{}", &img);
             let filename = self.title.to_string() + "/" + img.split("/").last().unwrap();
             let response = reqwest::get(img).await.unwrap();
             let bytes = response.bytes().await.unwrap();
-            let mut out = File::create(filename).unwrap();
-            io::copy(&mut bytes.as_ref(), &mut out).unwrap();
+            let mut out: BufWriter<File> = BufWriter::new(File::create(filename).unwrap());
+            copy(&mut bytes.as_ref(), &mut out).unwrap();
         }
     }
 }
@@ -25,17 +27,9 @@ impl Manga {
 async fn main() {
     env_logger::init();
     let arg1: String = get_url_to_args();
-    let result: String = get_reqwest(&arg1).await.unwrap();
-    let ehantai_html: Html = Html::parse_document(&result);
-    let manga = ehentai::get_ehentai(&ehantai_html).await;
+    let manga = ehentai::get_ehentai(&arg1).await;
     
     manga.manga_download().await;
-}
-
-async fn get_reqwest(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let body = reqwest::get(url).await?.text().await?;
-
-    Ok(body)
 }
 
 fn get_url_to_args() -> String {
@@ -46,5 +40,3 @@ fn get_url_to_args() -> String {
     let d: &String = args.get(1).unwrap();
     return d.to_string();
 }
-
-
