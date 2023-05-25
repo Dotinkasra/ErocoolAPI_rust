@@ -23,10 +23,10 @@ impl Manga {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let arg1: String = get_url_to_args();
     let result: String = get_reqwest(&arg1).await.unwrap();
     let ehantai_html: Html = Html::parse_document(&result);
-
     let manga = ehentai::get_ehentai(&ehantai_html).await;
     
     manga.manga_download().await;

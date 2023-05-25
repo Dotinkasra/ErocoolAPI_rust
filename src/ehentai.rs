@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use log::{info, warn, error, trace};
+use log::{info};
 
 use scraper::Html;
 use scraper::Selector;
