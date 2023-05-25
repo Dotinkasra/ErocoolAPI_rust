@@ -2,9 +2,29 @@ use scraper::Html;
 use scraper::Selector;
 use regex::Regex;
 
-pub fn get_manga_name(html: &Html) -> String {
+use super::Manga;
+
+pub async fn get_ehentai(html: &Html) -> Manga {
+    let manga_name: String = get_manga_name(html);
+    let viewer_page_links: Vec<String> = get_viewer_links(html);
+    let img_links: &mut Vec<String> = &mut vec![];
+    
+    for viewer in viewer_page_links {
+        let response = reqwest::get(viewer).await.unwrap().text().await.unwrap();
+        let html: Html = Html::parse_document(&response);
+        let all_imglink = get_all_imglink(&html);
+        for img in all_imglink {
+            img_links.push(single_page_scraper(&img).await);
+        }
+    }
+
+    return Manga{title: manga_name, pages: img_links.to_vec(), total_pages_num: img_links.len() as u8};
+}
+
+fn get_manga_name(html: &Html) -> String {
     let selector_str: &str = "#gj";
     let selector: Selector = Selector::parse(selector_str).unwrap();
+
     for element in html.select(&selector) {
         return element.inner_html();
     }
@@ -17,7 +37,6 @@ fn get_all_imglink(html: &Html) -> Vec<String> {
     let mut imglinks: Vec<String> = vec![];
 
     for element in html.select(&selector) {
-        println!("{}", &element.inner_html());
         let alink_selector: Selector = Selector::parse("a").unwrap();
         for alink in element.select(&alink_selector) {
             let link = alink.value().attr("href").unwrap();
@@ -52,7 +71,6 @@ fn get_viewer_links(html: &Html)  -> Vec<String>{
         let last_page_num = &captures[3].parse::<u8>().unwrap();
 
         for i in 1..=*last_page_num {
-            println!("{}", i);
             let url = template.to_string() + "p=" + &i.to_string();
             viewer_links.push(url);
         }
@@ -61,3 +79,20 @@ fn get_viewer_links(html: &Html)  -> Vec<String>{
 
 }
 
+async fn single_page_scraper(url: &str) -> String {
+    //let client = reqwest::Client::new();
+    let response = reqwest::get(url).await.unwrap().text().await.unwrap();
+
+    let html: Html = Html::parse_document(&response);
+
+    let selector = Selector::parse("#img").unwrap();
+
+    let img_select = &mut html.select(&selector);
+
+    let img_src = img_select.nth(0)
+                            .unwrap()
+                            .value()
+                            .attr("src")
+                            .unwrap();
+    return img_src.to_string();
+}
