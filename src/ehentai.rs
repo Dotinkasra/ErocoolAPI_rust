@@ -1,9 +1,6 @@
-use std::collections::HashSet;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
+use scraper::{Html, Selector};
 use log::{info};
-
-use scraper::Html;
-use scraper::Selector;
 use regex::Regex;
 
 use super::Manga;
@@ -17,13 +14,13 @@ async fn get_reqwest(url: &str) -> Result<String, Box<dyn std::error::Error>> {
 pub async fn get_ehentai(url: &str) -> Manga {
     let result: String = get_reqwest(&url).await.unwrap();
     let html: Html = Html::parse_document(&result);
-    
+
     let manga_name: String = get_manga_name(&html);
     info!("【Name】{}", &manga_name);
 
     let external_viewer_links: Option<Vec<String>> = get_external_viewer_links(&html);
     let mut img_links: HashMap<u16, String> = HashMap::new();
-    
+
     for img in get_all_imglink(&html) {
         info!("【img】{}:{}", 1, &img);
         let (pagenum, imglink) = single_page_scraper(&img).await;
@@ -43,99 +40,68 @@ pub async fn get_ehentai(url: &str) -> Manga {
             }
         }
     }
-    return Manga{title: manga_name, pages: img_links};
+
+    Manga { title: manga_name, pages: img_links }
 }
 
 fn get_manga_name(html: &Html) -> String {
-    let selector_str: &str = "#gj";
-    let selector: Selector = Selector::parse(selector_str).unwrap();
-
-    for element in html.select(&selector) {
-        let title =  element.inner_html();
-        if title.is_empty() {
-            break;
-        }
-        return title;
-    }
-
-    let selector_str = "#gn";
+    let selector_str: &str = "#gj, #gn";
     let selector: Selector = Selector::parse(selector_str).unwrap();
 
     for element in html.select(&selector) {
         let title = element.inner_html();
-        return title;
+        if !title.is_empty() {
+            return title;
+        }
     }
 
-    return "Untitled".to_string();
+    "Untitled".to_string()
 }
 
 fn get_all_imglink(html: &Html) -> HashSet<String> {
-    let gdt_selector: &str = "#gdt div";
+    let gdt_selector: &str = "#gdt div a";
     let selector: Selector = Selector::parse(gdt_selector).unwrap();
-    let mut imglinks: Vec<String> = vec![];
+    let mut imglinks: HashSet<String> = HashSet::new();
 
     for element in html.select(&selector) {
-        let alink_selector: Selector = Selector::parse("a").unwrap();
-        for alink in element.select(&alink_selector) {
-            let link = alink.value().attr("href").unwrap();
-            imglinks.push(link.to_string());
+        if let Some(link) = element.value().attr("href") {
+            imglinks.insert(link.to_string());
         }
     }
-    let uniq_imglinks: HashSet<String> = imglinks.into_iter().collect();
-    return uniq_imglinks;
+
+    imglinks
 }
 
-fn get_external_viewer_links(html: &Html)  -> Option<Vec<String>>{
-    let mut viewer_links: Vec<String> = vec![];
-
-    let selector_td: Selector = Selector::parse("body > div:nth-child(10) > table > tbody > tr td").unwrap();
-    let selector_a: Selector = Selector::parse("a").unwrap();
-    
-    let element_tds: &mut scraper::html::Select = &mut html.select(&selector_td);
-    let element_lastpage: scraper::ElementRef = element_tds.rev().nth(1).unwrap();
-
-    let last_page_a: &mut scraper::element_ref::Select = &mut element_lastpage.select(&selector_a);
-    let i = last_page_a.next().unwrap();
-    let url = i.value().attr("href").unwrap();
-
+fn get_external_viewer_links(html: &Html) -> Option<Vec<String>> {
+    let selector_td: Selector = Selector::parse("body > div:nth-child(10) > table > tbody > tr td a").unwrap();
+    let element_tds = &mut html.select(&selector_td);
+    let last_page_a = element_tds.rev().nth(1)?.value().attr("href")?;
     let re = Regex::new(r"https://e-hentai.org/g/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/\?p=(\d+)").unwrap();
 
-    // Some(変数名) の形であれば
-    if let Some(captures) = re.captures(&url) {
-        let content_link = String::from("https://e-hentai.org/g/") + &captures[1] + "/" + &captures[2] + "/";
-        let last_page_num = &captures[3].parse::<u8>().unwrap();
-
-        for i in 1..=*last_page_num {
-            let numbered_url = content_link.to_string() + "?p=" + &i.to_string();
-            viewer_links.push(numbered_url);
-        }
+    if let Some(captures) = re.captures(&last_page_a) {
+        let content_link = format!("https://e-hentai.org/g/{}/{}", &captures[1], &captures[2]);
+        let last_page_num = captures[3].parse::<u8>().ok()?;
+        let viewer_links: Vec<String> = (1..=last_page_num).map(|i| format!("{}?p={}", &content_link, i)).collect();
+        Some(viewer_links)
     } else {
-        return None;
+        None
     }
-    return Some(viewer_links);
-
 }
 
 async fn single_page_scraper(url: &str) -> (u16, String) {
-    let pagenum: u16 = url_extract_pagenum(&url);
-
+    let pagenum = url_extract_pagenum(&url);
     let response = get_reqwest(&url).await.unwrap();
     let html: Html = Html::parse_document(&response);
     let selector = Selector::parse("#img").unwrap();
-    let img_select = &mut html.select(&selector);
-    let img_src = img_select.nth(0)
-                            .unwrap()
-                            .value()
-                            .attr("src")
-                            .unwrap();
-    return (pagenum, img_src.to_string());
+    let img_src = html.select(&selector).next().unwrap().value().attr("src").unwrap();
+    (pagenum, img_src.to_string())
 }
 
 fn url_extract_pagenum(url: &str) -> u16 {
     let pagenum_matchpattern = regex::Regex::new(r"/\d+-(\d+)").unwrap();
     if let Some(i) = pagenum_matchpattern.captures(&url) {
-        return i[1].parse().unwrap();
+        return i[1].parse().unwrap_or(0);
     } 
 
-    return 0;
+    0
 }
