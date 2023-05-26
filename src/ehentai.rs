@@ -19,7 +19,7 @@ pub async fn get_ehentai(url: &str) -> Manga {
     let html: Html = Html::parse_document(&result);
     
     let manga_name: String = get_manga_name(&html);
-    info!("【Name】:{}", &manga_name);
+    info!("【Name】{}", &manga_name);
 
     let external_viewer_links: Option<Vec<String>> = get_external_viewer_links(&html);
     let mut img_links: HashMap<u16, String> = HashMap::new();
@@ -51,8 +51,21 @@ fn get_manga_name(html: &Html) -> String {
     let selector: Selector = Selector::parse(selector_str).unwrap();
 
     for element in html.select(&selector) {
-        return element.inner_html();
+        let title =  element.inner_html();
+        if title.is_empty() {
+            break;
+        }
+        return title;
     }
+
+    let selector_str = "#gn";
+    let selector: Selector = Selector::parse(selector_str).unwrap();
+
+    for element in html.select(&selector) {
+        let title = element.inner_html();
+        return title;
+    }
+
     return "Untitled".to_string();
 }
 

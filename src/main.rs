@@ -16,6 +16,7 @@ impl Manga {
         for (pagenum, img) in self.pages.iter() {
             info!("{}", &img);
             let filename = self.title.to_string() + "/" + &pagenum.to_string() + "_" + img.split("/").last().unwrap();
+            info!("【filename】{}", &filename);
             let response = reqwest::get(img).await.unwrap();
             let bytes = response.bytes().await.unwrap();
             let mut out: BufWriter<File> = BufWriter::new(File::create(filename).unwrap());
