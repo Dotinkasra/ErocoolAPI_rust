@@ -1,20 +1,21 @@
 use log::info;
 use std::{env, fs::{File, self}};
 use std::io::{BufWriter, copy};
+use std::collections::HashMap;
 
 mod ehentai;
 
 pub struct Manga {
     title: String,
-    pages: Vec<String>
+    pages: HashMap<u16, String>
 }
 
 impl Manga {
     async fn manga_download(self) {
         fs::create_dir_all(&self.title).unwrap();
-        for img in self.pages.iter() {
+        for (pagenum, img) in self.pages.iter() {
             info!("{}", &img);
-            let filename = self.title.to_string() + "/" + img.split("/").last().unwrap();
+            let filename = self.title.to_string() + "/" + &pagenum.to_string() + "_" + img.split("/").last().unwrap();
             let response = reqwest::get(img).await.unwrap();
             let bytes = response.bytes().await.unwrap();
             let mut out: BufWriter<File> = BufWriter::new(File::create(filename).unwrap());

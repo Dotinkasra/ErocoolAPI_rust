@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::collections::HashMap;
 use log::{info};
 
 use scraper::Html;
@@ -21,11 +22,12 @@ pub async fn get_ehentai(url: &str) -> Manga {
     info!("【Name】:{}", &manga_name);
 
     let external_viewer_links: Option<Vec<String>> = get_external_viewer_links(&html);
-    let img_links: &mut Vec<String> = &mut vec![];
+    let mut img_links: HashMap<u16, String> = HashMap::new();
     
     for img in get_all_imglink(&html) {
         info!("【img】{}:{}", 1, &img);
-        img_links.push(single_page_scraper(&img).await);
+        let (pagenum, imglink) = single_page_scraper(&img).await;
+        img_links.insert(pagenum, imglink);
     }
 
     if let Some(viewer_page_links) = external_viewer_links {
@@ -36,11 +38,12 @@ pub async fn get_ehentai(url: &str) -> Manga {
             let all_imglink = get_all_imglink(&current_html);
             for img in all_imglink {
                 info!("【img】{}:{}", "external", &img);
-                img_links.push(single_page_scraper(&img).await);
+                let (pagenum, imglink) = single_page_scraper(&img).await;
+                img_links.insert(pagenum, imglink);
             }
         }
     }
-    return Manga{title: manga_name, pages: img_links.to_vec()};
+    return Manga{title: manga_name, pages: img_links};
 }
 
 fn get_manga_name(html: &Html) -> String {
@@ -101,8 +104,10 @@ fn get_external_viewer_links(html: &Html)  -> Option<Vec<String>>{
 
 }
 
-async fn single_page_scraper(url: &str) -> String {
-    let response = reqwest::get(url).await.unwrap().text().await.unwrap();
+async fn single_page_scraper(url: &str) -> (u16, String) {
+    let pagenum: u16 = url_extract_pagenum(&url);
+
+    let response = get_reqwest(&url).await.unwrap();
     let html: Html = Html::parse_document(&response);
     let selector = Selector::parse("#img").unwrap();
     let img_select = &mut html.select(&selector);
@@ -111,5 +116,14 @@ async fn single_page_scraper(url: &str) -> String {
                             .value()
                             .attr("src")
                             .unwrap();
-    return img_src.to_string();
+    return (pagenum, img_src.to_string());
+}
+
+fn url_extract_pagenum(url: &str) -> u16 {
+    let pagenum_matchpattern = regex::Regex::new(r"/\d+-(\d+)").unwrap();
+    if let Some(i) = pagenum_matchpattern.captures(&url) {
+        return i[1].parse().unwrap();
+    } 
+
+    return 0;
 }
