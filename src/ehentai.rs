@@ -33,7 +33,7 @@ pub async fn get_ehentai(url: &str) -> Manga {
     if let Some(viewer_page_links) = external_viewer_links {
         for viewer in viewer_page_links {
             info!("【viewer】:{}", &viewer);
-            let response: String = get_reqwest(&url).await.unwrap();
+            let response: String = get_reqwest(&viewer).await.unwrap();
             let current_html: Html = Html::parse_document(&response);
             let all_imglink = get_all_imglink(&current_html);
             for img in all_imglink {
@@ -90,11 +90,10 @@ fn get_external_viewer_links(html: &Html)  -> Option<Vec<String>>{
     // Some(変数名) の形であれば
     if let Some(captures) = re.captures(&url) {
         let content_link = String::from("https://e-hentai.org/g/") + &captures[1] + "/" + &captures[2] + "/";
-        let template = content_link.clone();
         let last_page_num = &captures[3].parse::<u8>().unwrap();
 
         for i in 1..=*last_page_num {
-            let numbered_url = template.to_string() + "?p=" + &i.to_string();
+            let numbered_url = content_link.to_string() + "?p=" + &i.to_string();
             viewer_links.push(numbered_url);
         }
     } else {
