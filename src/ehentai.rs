@@ -45,10 +45,20 @@ pub async fn get_ehentai(url: &str) -> Manga {
 }
 
 fn get_manga_name(html: &Html) -> String {
-    let selector_str: &str = "#gj, #gn";
-    let selector: Selector = Selector::parse(selector_str).unwrap();
+    let gj_selector_str: &str = "#gj";
+    let gj_selector: Selector = Selector::parse(gj_selector_str).unwrap();
 
-    for element in html.select(&selector) {
+    for element in html.select(&gj_selector) {
+        let title = element.inner_html();
+        if !title.is_empty() {
+            return title;
+        }
+    }
+
+    let gn_selector_str: &str = "#gn";
+    let gn_selector: Selector = Selector::parse(gn_selector_str).unwrap();
+    
+    for element in html.select(&gn_selector) {
         let title = element.inner_html();
         if !title.is_empty() {
             return title;
